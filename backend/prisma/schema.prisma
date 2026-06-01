@@ -1,0 +1,140 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String?
+  githubId     String?  @unique
+  displayName  String
+  avatarUrl    String?
+  role         String   @default("user")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roomMembers        RoomMember[]
+  ownedRooms         Room[]           @relation("RoomOwner")
+  messages           Message[]
+  notes              Note[]
+  files              File[]
+  voiceChannelMember VoiceChannelMember[]
+  reactions          Reaction[]
+}
+
+model Room {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  isPublic    Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy     User     @relation("RoomOwner", fields: [createdById], references: [id])
+  members       RoomMember[]
+  messages      Message[]
+  notes         Note[]
+  files         File[]
+  voiceChannels VoiceChannel[]
+}
+
+model RoomMember {
+  roomId   String
+  userId   String
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, userId])
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    String
+  title     String
+  content   String   @db.Text
+  isPrivate Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Message {
+  id           String   @id @default(uuid())
+  roomId       String
+  userId       String
+  parentId     String?
+  contentType  String   @default("text")
+  content      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  room      Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Message?   @relation("ThreadReplies", fields: [parentId], references: [id])
+  replies   Message[]  @relation("ThreadReplies")
+  file      File?
+  reactions Reaction[]
+}
+
+model File {
+  id           String   @id @default(uuid())
+  messageId    String   @unique
+  roomId       String
+  uploadedById String
+  filename     String
+  s3Key        String   @unique
+  mimeType     String
+  size         Int
+  createdAt    DateTime @default(now())
+
+  message    Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  room       Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+}
+
+model VoiceChannel {
+  id        String   @id @default(uuid())
+  roomId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  room    Room                 @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  members VoiceChannelMember[]
+}
+
+model VoiceChannelMember {
+  channelId String
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  channel VoiceChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
